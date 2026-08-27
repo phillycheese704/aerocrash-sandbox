@@ -191,8 +191,20 @@
     #rotateHint{display:grid}
   }
 
+
+  /* ---------- controller menu navigation ---------- */
+  .gamepad-focus{
+    outline:2px solid rgba(135,220,255,.95)!important;
+    outline-offset:3px!important;
+    border-color:rgba(135,220,255,.72)!important;
+    box-shadow:0 0 0 5px rgba(120,216,255,.10),0 12px 34px rgba(0,0,0,.28)!important;
+    filter:brightness(1.08);
+  }
+  .scenario.gamepad-focus{transform:translateY(-2px);background:rgba(120,216,255,.10)}
+  .play-btn.gamepad-focus{transform:translateY(-2px)}
+
 </style>
-</head>
+<script type="text/javascript" nonce="883da43fb1e240e0a3f4d162768" src="//local.adguard.org?ts=1787821703402&amp;type=content-script&amp;dmn=chatgpt.com&amp;url=https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Festuary%2Fcontent%3Fid%3Dfile_0000000062808210a3c564e39ea81372%26ts%3D496617%26p%3Dfs%26cid%3D1%26sig%3Dad51e723f9828749304cf835a2011538176ce9404405dd6618fa6389148fa6fb%26v%3D0&amp;app=chrome.exe&amp;css=2&amp;js=1&amp;rel=1&amp;rji=1&amp;sbe=1&amp;stealth=1&amp;st-ua=TW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE1MS4wLjAuMCBTYWZhcmkvNTM3LjM2&amp;st-ch-brands=W3siYnJhbmQiOiJOb3Q9QT9CcmFuZCIsInZlcnNpb24iOiI5OSJ9LCB7ImJyYW5kIjoiR29vZ2xlIENocm9tZSIsInZlcnNpb24iOiIxNTEifSwgeyJicmFuZCI6IkNocm9taXVtIiwidmVyc2lvbiI6IjE1MSJ9XQ==&amp;st-ch-mobile=ZmFsc2U=&amp;st-ch-platform=V2luZG93cw==&amp;st-push&amp;st-loc&amp;st-dnt&amp;st-1pcttl=4320"></script><script type="text/javascript" nonce="883da43fb1e240e0a3f4d162768" src="//local.adguard.org?ts=1787821703402&amp;name=AdGuard%20Extra&amp;name=AdGuard%20Popup%20Blocker&amp;name=Web%20of%20Trust&amp;type=user-script"></script></head>
 <body>
 <div id="game"></div>
 <div id="loading">INITIALIZING FLIGHT DYNAMICS…</div>
@@ -237,7 +249,7 @@
           <button class="scenario" data-s="desert"><span class="ico">☀</span><span><strong>Desert Run</strong><small>Fast, low flight across dunes and rocky mesas at sunset.</small></span><span class="go">→</span></button>
         </div>
       </div>
-      <footer class="scenario-footer"><span>Keyboard, touch and standard gamepads supported.</span><span><kbd>N</kbd> airport nav · <kbd>T</kbd> +3 hours · <kbd>C</kbd> camera · <kbd>Esc</kbd> menu</span></footer>
+      <footer class="scenario-footer"><span>Controller menus: D-pad / left stick · A select · B back.</span><span><kbd>N</kbd> airport nav · <kbd>T</kbd> +3 hours · <kbd>C</kbd> camera · <kbd>Esc</kbd> menu</span></footer>
     </div>
   </section>
 </div>
@@ -937,6 +949,69 @@ addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')e.preventDef
 const touchInput={pitch:0,turn:0,throttleUp:false,throttleDown:false};
 const gamepadInput={pitch:0,turn:0,yaw:0,throttleUp:false,throttleDown:false};
 let gamepadPrevButtons=[];
+let gamepadStickLatchX=0,gamepadStickLatchY=0;
+let menuFocusIndex=0,menuFocusContext='';
+
+function clearGamepadFocus(){
+  document.querySelectorAll('.gamepad-focus').forEach(el=>el.classList.remove('gamepad-focus'));
+}
+function currentMenuContext(){
+  if(!ui.crashCard.classList.contains('hidden')) return 'results';
+  if(!ui.menu.classList.contains('hidden')){
+    if($('#scenarioScreen')?.classList.contains('active')) return 'scenarios';
+    return 'start';
+  }
+  return '';
+}
+function menuItemsFor(context){
+  if(context==='start') return [$('#playBtn')].filter(Boolean);
+  if(context==='scenarios') return [...document.querySelectorAll('.scenario')];
+  if(context==='results') return [$('#restartBtn'),$('#menuBtn')].filter(Boolean);
+  return [];
+}
+function setMenuFocus(index=0,context=currentMenuContext()){
+  const items=menuItemsFor(context);
+  clearGamepadFocus();
+  if(!items.length){menuFocusIndex=0;menuFocusContext=context;return}
+  menuFocusContext=context;
+  menuFocusIndex=((index%items.length)+items.length)%items.length;
+  const el=items[menuFocusIndex];
+  el.classList.add('gamepad-focus');
+  el.focus({preventScroll:true});
+}
+function ensureMenuFocus(){
+  const context=currentMenuContext();
+  if(!context){clearGamepadFocus();menuFocusContext='';return false}
+  if(context!==menuFocusContext)setMenuFocus(0,context);
+  else if(!document.querySelector('.gamepad-focus'))setMenuFocus(menuFocusIndex,context);
+  return true;
+}
+function moveMenuFocus(dx,dy){
+  const context=currentMenuContext(),items=menuItemsFor(context);
+  if(!items.length)return;
+  if(context==='scenarios'){
+    // Spatial 3x3 navigation.
+    let row=Math.floor(menuFocusIndex/3),col=menuFocusIndex%3;
+    if(dx) col=(col+dx+3)%3;
+    if(dy) row=(row+dy+3)%3;
+    setMenuFocus(row*3+col,context);
+  }else{
+    const step=(dx||dy);
+    if(step)setMenuFocus(menuFocusIndex+step,context);
+  }
+}
+function activateMenuFocus(){
+  const context=currentMenuContext(),items=menuItemsFor(context);
+  if(!items.length)return;
+  items[clamp(menuFocusIndex,0,items.length-1)]?.click();
+}
+function controllerBack(){
+  const context=currentMenuContext();
+  if(context==='scenarios'){showMenuScreen('start');setMenuFocus(0,'start');}
+  else if(context==='results'){openMenu('scenarios');setMenuFocus(0,'scenarios');}
+  else if(state.playing||state.replaying){openMenu('scenarios');setMenuFocus(0,'scenarios');}
+}
+
 function deadzone(v,d=.14){const a=Math.abs(v);return a<d?0:Math.sign(v)*(a-d)/(1-d)}
 function pulseCamera(){
   if(!state.playing)return;
@@ -953,20 +1028,54 @@ function updateGamepad(){
     gamepadInput.throttleUp=gamepadInput.throttleDown=false;
     ui.controllerHint?.classList.remove('show');
     gamepadPrevButtons=[];
+    gamepadStickLatchX=gamepadStickLatchY=0;
+    clearGamepadFocus();menuFocusContext='';
     return;
   }
   ui.controllerHint?.classList.add('show');
-  const ax=gp.axes||[];
-  // Standard mapping: left stick turns; pulling stick back climbs.
+  const ax=gp.axes||[],btn=gp.buttons||[];
+  const edge=i=>!!btn[i]?.pressed&&!gamepadPrevButtons[i];
+
+  // Menus/results consume the controller before flight controls do.
+  if(ensureMenuFocus()){
+    gamepadInput.pitch=gamepadInput.turn=gamepadInput.yaw=0;
+    gamepadInput.throttleUp=gamepadInput.throttleDown=false;
+
+    const sx=ax[0]||0,sy=ax[1]||0;
+    const stickX=sx>.62?1:sx<-.62?-1:0;
+    const stickY=sy>.62?1:sy<-.62?-1:0;
+
+    // D-pad: 12 up, 13 down, 14 left, 15 right (standard mapping).
+    if(edge(14)) moveMenuFocus(-1,0);
+    if(edge(15)) moveMenuFocus(1,0);
+    if(edge(12)) moveMenuFocus(0,-1);
+    if(edge(13)) moveMenuFocus(0,1);
+
+    // Left-stick navigation with a latch so one tilt = one move.
+    if(stickX!==0 && gamepadStickLatchX===0) moveMenuFocus(stickX,0);
+    if(stickY!==0 && gamepadStickLatchY===0) moveMenuFocus(0,stickY);
+    gamepadStickLatchX=stickX;
+    gamepadStickLatchY=stickY;
+
+    if(edge(0)) activateMenuFocus();   // A / Cross
+    if(edge(1)) controllerBack();       // B / Circle
+
+    gamepadPrevButtons=Array.from(btn,b=>!!b.pressed);
+    return;
+  }
+
+  gamepadStickLatchX=gamepadStickLatchY=0;
+
+  // Standard flight mapping: left stick turns; pulling stick back climbs.
   gamepadInput.turn=-deadzone(ax[0]||0);
   gamepadInput.pitch=deadzone(ax[1]||0);
   gamepadInput.yaw=deadzone(ax[2]||0)*.55;
-  const btn=gp.buttons||[];
   gamepadInput.throttleDown=!!(btn[6]?.pressed || (btn[6]?.value||0)>.18);
   gamepadInput.throttleUp=!!(btn[7]?.pressed || (btn[7]?.value||0)>.18);
-  const edge=i=>!!btn[i]?.pressed&&!gamepadPrevButtons[i];
+
   if(edge(0) && state.replaying) finishReplay();       // A / Cross
   else if(edge(0) && state.playing) pulseCamera();     // A / Cross
+  if(edge(1) && state.playing) openMenu('scenarios');  // B / Circle
   if(edge(2)) pulseNav();                              // X / Square
   if(edge(3) && state.playing&&!state.replaying){worldSettings.time=(worldSettings.time+3)%24;showMessage(`LOCAL TIME ${formatClock(worldSettings.time)}`)}
   if(edge(9)) pulseMenu();                             // Menu / Options
@@ -1030,6 +1139,7 @@ function configureWorld(id){
   if(id==='desert'){worldSettings.mode='desert';worldSettings.time=18.15;worldSettings.cloud=.06;worldSettings.weatherName='Dry / clear';}
 }
 function startScenario(id){
+  clearGamepadFocus();menuFocusContext='';
   state.scenario=id; state.playing=true; state.replaying=false; state.recording=[];state.replayFrames=[];state.crashDelay=0;state.replayIndex=0;state.accum=0;state.lightning=0;state.weatherClock=0;state.completed=false;state.stopTimer=0;state.touchdown=null;state.objectivePassed=false;state.startHealth=null;state.objectiveNotice=false;
   plane.cameraMode=0; plane.replayCamera=0; camera.up.set(0,1,0);
   configureWorld(id);
@@ -1052,6 +1162,8 @@ function showMenuScreen(which='start'){
   const start=$('#startScreen'), scenarios=$('#scenarioScreen');
   start.classList.toggle('active',which==='start');
   scenarios.classList.toggle('active',which==='scenarios');
+  menuFocusContext='';
+  clearGamepadFocus();
 }
 function openMenu(which='scenarios'){
   // Event listeners used to pass a PointerEvent here, which made both menu screens inactive.
