@@ -3,7 +3,8 @@
 A browser-based aircraft crash-physics sandbox built with Three.js.
 
 ## Play
-Open the GitHub Pages URL for this repository.
+Open the GitHub Pages URL for this repository:
+*https://phillycheese704.github.io/aerocrash-sandbox/*
 
 ## Controls
 
